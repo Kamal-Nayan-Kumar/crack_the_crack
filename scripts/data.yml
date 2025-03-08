@@ -1,0 +1,5 @@
+train: C:/Users/kamal/Desktop/hack_n_maze_2/dataset/train/images
+val: C:/Users/kamal/Desktop/hack_n_maze_2/dataset/val/images
+
+nc: 1  # Number of classes (only "bottle")
+names: ["bottle"]
