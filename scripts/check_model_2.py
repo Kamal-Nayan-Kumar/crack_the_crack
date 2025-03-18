@@ -1,49 +1,74 @@
 from ultralytics import YOLO
 import cv2
 
-# Load the trained YOLOv8 model
-model = YOLO("scripts/train/weights/best.pt")  # Update with your trained model path
+# Load trained YOLO model
+model = YOLO("scripts/train10/weights/best.pt")  # Update with your trained model path
 
-# Path to input video
-video_path = "input_video.mp4"  # Replace with your video file
-output_path = "output_video.mp4"  # Where the processed video will be saved
+# Load image
+image_path = "dataset/naya_image.png"  # Update with your image path
+image = cv2.imread(image_path)
 
-# Open video
-cap = cv2.VideoCapture(video_path)
-fps = int(cap.get(cv2.CAP_PROP_FPS))
-width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+if image is None:
+    print("❌ Error: Unable to load image!")
+    exit()
 
-# Define the video writer
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec
-out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+# Run YOLO detection
+results = model(image)
 
-while cap.isOpened():
-    ret, frame = cap.read()
-    if not ret:
-        break  # Stop when video ends
+# Extract detections
+bottles = []
+cracks = []
 
-    # Run YOLO inference
-    results = model(frame)
+for result in results:
+    for box in result.boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
+        conf = box.conf[0].item()  # Confidence score
+        cls = int(box.cls[0])  # Class ID
 
-    # Draw detections on frame
-    for result in results:
-        for box in result.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            conf = box.conf[0]  # Confidence score
-            cls = int(box.cls[0])  # Class ID
+        if conf < 0.3:  # Confidence threshold (adjust if needed)
+            continue
 
-            label = f"{model.names[cls]}: {conf:.2f}"
-            color = (0, 255, 0) if cls == 0 else (0, 0, 255)  # Green for bottles, Red for cracks
+        if cls == 0:  # Assuming class 0 = Bottle
+            bottles.append((x1, y1, x2, y2))
+        elif cls == 1:  # Assuming class 1 = Crack
+            cracks.append((x1, y1, x2, y2))
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+# Check if crack is inside a bottle
+valid_detections = []
+for bx1, by1, bx2, by2 in bottles:
+    crack_inside = False
 
-    out.write(frame)  # Save the frame
+    for cx1, cy1, cx2, cy2 in cracks:
+        if bx1 <= cx1 and bx2 >= cx2 and by1 <= cy1 and by2 >= cy2:  # Crack inside bottle
+            crack_inside = True
+            valid_detections.append(("crack", (cx1, cy1, cx2, cy2)))
 
-# Release resources
-cap.release()
-out.release()
+    if crack_inside:
+        valid_detections.append(("bottle_with_crack", (bx1, by1, bx2, by2)))
+    else:
+        valid_detections.append(("bottle", (bx1, by1, bx2, by2)))
+
+# Draw valid detections
+for obj, (x1, y1, x2, y2) in valid_detections:
+    if obj == "bottle":
+        color = (0, 255, 0)  # Green for normal bottle
+        label = "Bottle"
+    elif obj == "bottle_with_crack":
+        color = (0, 165, 255)  # Orange for bottle with crack
+        label = "Bottle (Cracked)"
+    else:
+        color = (0, 0, 255)  # Red for crack
+        label = "Crack"
+
+    cv2.rectangle(image, (x1, y1), (x2, y2), color, 2)
+    cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+# Show the image
+cv2.imshow("Image Detection", image)
+cv2.waitKey(0)
 cv2.destroyAllWindows()
 
-print("Video processing complete! Output saved as:", output_path)
+# Save the output image
+output_image_path = "output_detected.jpg"
+cv2.imwrite(output_image_path, image)
+print(f"🎉 Image detection complete! Output saved as: {output_image_path}")

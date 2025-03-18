@@ -8,7 +8,7 @@ model = YOLO("yolov8n.pt")  # Load pretrained model
 results = model.train(
     data="dataset/dataset_cracked/data.yaml",
     epochs=100,
-    batch=16,
+    batch=4,
     imgsz=640
 )
 
